@@ -30,7 +30,7 @@ module.exports.run = async function({ api, event, config, threadsData }) {
 ┕━━━━━━━━━━━━━━━━━━━━┙
 
 ■ [ الـبـادئـة الـحـالـيـة ]
-▸ الـنـظـام : [ ${globalPrefix} ]
+▸ الـنـظـام : [ ${globalPrefix}/ ]
 ▸ الـمجموعة : [ ${threadPrefix} ]
 
 ■ [ مـلاحـظـة ]
