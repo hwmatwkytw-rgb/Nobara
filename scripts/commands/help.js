@@ -1,7 +1,7 @@
 const chalk = require('chalk');
 
 module.exports.config = {
-  name: "الاوامر",
+  name: "اوامر ",
   aliases: ["help", "commands", "cmd"],
   version: "1.0",
   author: "سينكو",
