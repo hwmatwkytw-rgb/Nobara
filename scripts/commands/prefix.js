@@ -21,7 +21,10 @@ module.exports.run = async function({ api, event, config, threadsData }) {
     api.setMessageReaction("⏳", messageID, () => {}, true);
 
     // جلب بادئة المجموعة من قاعدة البيانات (إذا كانت مخصصة) أو استخدام الافتراضية
-    const threadSettings = await threadsData.getFile(threadID) || {};
+    const threadSettings = threadsData && threadsData.getFile
+      ? await threadsData.getFile(threadID)
+      : {};
+
     const threadPrefix = threadSettings.prefix || config.prefix;
     const globalPrefix = config.prefix;
 
@@ -30,7 +33,7 @@ module.exports.run = async function({ api, event, config, threadsData }) {
 ┕━━━━━━━━━━━━━━━━━━━━┙
 
 ■ [ الـبـادئـة الـحـالـيـة ]
-▸ الـنـظـام : [ ${globalPrefix}/ ]
+▸ الـنـظـام : [ ${globalPrefix} ]
 ▸ الـمجموعة : [ ${threadPrefix} ]
 
 ■ [ مـلاحـظـة ]
