@@ -1,17 +1,34 @@
 const chalk = require('chalk');
+const axios = require('axios');
+const fs = require('fs-extra');
+const path = require('path');
 
 module.exports.config = {
   name: "اوامر",
   aliases: ["help", "commands", "cmd", "الاوامر"],
-  version: "1.0",
+  version: "5.6",
   author: "سينكو",
   countDown: 5,
   adminOnly: false,
-  description: "عرض قائمة الأوامر أو تفاصيل أمر معين",
+  description: "عرض قائمة الأوامر بالزخرفة الجديدة.",
   category: "نظام",
-  guide: "{pn} [اسم الأمر] - اتركها فارغة لرؤية الكل",
+  guide: "{pn}\n{pn} <اسم_الأمر>",
   usePrefix: true
 };
+
+async function downloadImage(url) {
+  const imagePath = path.join(__dirname, "cache", "help.jpg");
+
+  const response = await axios({
+    url,
+    method: "GET",
+    responseType: "arraybuffer"
+  });
+
+  fs.writeFileSync(imagePath, response.data);
+
+  return imagePath;
+}
 
 module.exports.run = async function({ api, event, args, config }) {
 
@@ -25,129 +42,222 @@ module.exports.run = async function({ api, event, args, config }) {
 
   try {
 
-    if (!args.length) {
+    // =========================
+    // تفاصيل أمر معين
+    // =========================
 
-      let msg = `┌  ＮＯＢＡＲＡ • ＭＥＮＵ  ┐\n┕━━━━━━━━━━━━━━━┙\n\n`;
+    if (args[0]) {
 
-      const categories = {};
+      const input = args[0].toLowerCase();
 
-      for (const [name, value] of commands) {
+      let command = commands.get(input);
 
-        if (!value || !value.config) continue;
+      if (!command) {
 
-        if (
-          value.config.adminOnly &&
-          Array.isArray(config.adminUIDs) &&
-          !config.adminUIDs.includes(senderID)
-        ) continue;
+        for (const [name, value] of commands) {
 
-        const category = value.config.category || "عام";
-
-        if (!categories[category]) {
-          categories[category] = {
-            commands: []
-          };
+          if (
+            value &&
+            value.config &&
+            Array.isArray(value.config.aliases) &&
+            value.config.aliases.includes(input)
+          ) {
+            command = value;
+            break;
+          }
         }
-
-        categories[category].commands.push(name);
       }
 
-      Object.keys(categories)
-        .sort()
-        .forEach((category) => {
+      if (!command) {
 
-          msg += `■ [ ${category.toUpperCase()} ]\n`;
+        return api.sendMessage(
+          `❌ لم يتم العثور على الأمر "${input}"`,
+          threadID,
+          null,
+          messageID
+        );
+      }
 
-          msg += `▸ ${categories[category].commands
-            .sort()
-            .join(" ✧ ")}\n\n`;
-        });
+      const cmd = command.config;
 
-      msg += `┌━━━━━━━━━━━━━━━┐\n`;
-      msg += `▸ إجمالي الأوامر: [ ${[...commands.keys()].length} ]\n`;
-      msg += `▸ البادئة: [ ${prefix} ]\n`;
-      msg += `▸ المطور: سـيـنـكـو\n`;
-      msg += `┕━━━━━━━━━━━━━━━┙\n\n`;
+      let detailMessage = `⏣────── ✾ ⌬ ✾ ──────⏣\n`;
+      detailMessage += `✾ ┇ ⏣ ⟬ الإســم ⟭ : ${cmd.name}\n`;
+      detailMessage += `✾ ┇ ◍ الـوصـف : ${cmd.description || "لا يوجد"}\n`;
+      detailMessage += `✾ ┇ ◍ الـمؤلـف : ${cmd.author || "غير معروف"}\n`;
+      detailMessage += `✾ ┇ ◍ الـإصـدار : ${cmd.version || "1.0"}\n`;
 
-      msg += `『 ${prefix}اوامر + اسم الأمر للتفاصيل 』`;
+      if (cmd.guide) {
+
+        const usage = typeof cmd.guide === "string"
+          ? cmd.guide
+          : cmd.guide.ar || "";
+
+        detailMessage += `✾ ┇\n✾ ┇ ◍ طريقة الاستخدام :\n`;
+        detailMessage += `✾ ┇ ⬩ ${usage.replace(/{pn}/g, prefix + cmd.name)}\n`;
+      }
+
+      detailMessage += `⏣────── ✾ ⌬ ✾ ──────⏣`;
 
       return api.sendMessage(
-        msg,
+        detailMessage,
         threadID,
         null,
         messageID
       );
     }
 
-    const commandName = args[0].toLowerCase();
+    // =========================
+    // تصنيف الأوامر
+    // =========================
 
-    let command = commands.get(commandName);
+    const categories = {};
 
-    if (!command) {
+    const categoryMap = {
+      group: "المجموعة",
+      image: "الصور",
+      media: "الوسائط",
+      admin: "الإدارة",
+      fun: "الترفيه",
+      random: "عشوائي",
+      music: "الموسيقى",
+      video: "الفيديو",
+      ai: "الذكاء الاصطناعي",
+      tools: "الأدوات",
+      utility: "الخدمات السريعة",
+      owner: "المطور",
+      level: "المستوى",
+      game: "اللعب",
+      play: "اللعب"
+    };
 
-      for (const [name, value] of commands) {
+    const uniqueCommands = [];
 
-        if (
-          value &&
-          value.config &&
-          Array.isArray(value.config.aliases) &&
-          value.config.aliases.includes(commandName)
-        ) {
-          command = value;
-          break;
-        }
+    for (const [name, command] of commands) {
+
+      if (!command || !command.config) continue;
+
+      const cmd = command.config;
+
+      if (
+        cmd.adminOnly &&
+        Array.isArray(config.adminUIDs) &&
+        !config.adminUIDs.includes(senderID)
+      ) continue;
+
+      if (uniqueCommands.find(c => c.name === cmd.name)) continue;
+
+      uniqueCommands.push(cmd);
+
+      let category = cmd.category || "الترفيه";
+
+      if (
+        ["اقتصاد", "اللعب", "game", "play"].includes(category)
+      ) category = "اللعب";
+
+      if (
+        category === "owner" ||
+        category === "المطور"
+      ) category = "المطور";
+
+      category = categoryMap[category] || category;
+
+      if (!categories[category]) {
+        categories[category] = [];
       }
+
+      categories[category].push(cmd.name);
     }
 
-    if (!command) {
+    const orderedCats = [
+      "المجموعة",
+      "الصور",
+      "الوسائط",
+      "الذكاء الاصطناعي",
+      "الترفيه",
+      "اللعب",
+      "عشوائي",
+      "المطور",
+      "الأدوات"
+    ];
 
-      return api.sendMessage(
-        `❌ الأمر "${commandName}" غير موجود.`,
-        threadID,
-        null,
-        messageID
+    // =========================
+    // بناء القائمة
+    // =========================
+
+    let finalMessage = `⏣────── ✾ ⌬ ✾ ──────⏣\n✾ ┇\n`;
+
+    for (const category of orderedCats) {
+
+      const cmds = categories[category];
+
+      if (!cmds || !cmds.length) continue;
+
+      if (
+        category === "المطور" &&
+        Array.isArray(config.adminUIDs) &&
+        !config.adminUIDs.includes(senderID)
+      ) continue;
+
+      finalMessage += `✾ ┇ ⏣ ⟬ قـسـم ${category.toUpperCase()} ⟭\n`;
+
+      for (let i = 0; i < cmds.length; i += 3) {
+
+        const row = cmds
+          .slice(i, i + 3)
+          .map(cmd => `◍ ${cmd}`)
+          .join(" ");
+
+        finalMessage += `✾ ┇ ${row}\n`;
+      }
+
+      finalMessage += `✾ ┇ ⸻⸻⸻⸻⸻\n✾ ┇\n`;
+    }
+
+    finalMessage += `⏣────── ✾ ⌬ ✾ ──────⏣\n`;
+    finalMessage += ` ⠇عـدد الأوامـر: ${uniqueCommands.length}\n`;
+    finalMessage += ` ⠇الـمـطـوࢪ: sakran 𓆩☆𓆪`;
+
+    // =========================
+    // إرسال الصورة
+    // =========================
+
+    try {
+
+      const imagePath = await downloadImage(
+        "https://i.ibb.co/FZCHwt9/received-1740662803574945.webp"
       );
-    }
 
-    const c = command.config;
-
-    const usage =
-      c.guide?.replace(
-        /{pn}/g,
-        `${prefix}${c.name}`
-      ) || `${prefix}${c.name}`;
-
-    const res = `
-┌  ＮＯＢＡＲＡ • ＩＮＦＯ  ┐
-┕━━━━━━━━━━━━━━━┙
-
-■ [ مـعـلـومـات الـمـهـمـة ]
-▸ الاسم: ${c.name}
-▸ الوصف: ${c.description || "لا يوجد"}
-▸ الاختصارات: ${Array.isArray(c.aliases) ? c.aliases.join(", ") : "لا يوجد"}
-▸ الانتظار: ${c.countDown || 1} ثانية
-▸ الفئة: ${c.category || "عام"}
-
-■ [ طـريـقـة الاسـتـخـدام ]
-▸ ${usage}
-
-┌━━━━━━━━━━━━━━━┐
-┕  ＤＥＶ BY ＳＩＮＫＯ  ┙
-`.trim();
-
-    return api.sendMessage(
-      res,
+      return api.sendMessage({
+        body: finalMessage.trim(),
+        attachment: fs.createReadStream(imagePath)
+      },
       threadID,
-      null,
+      () => {
+        if (fs.existsSync(imagePath)) {
+          fs.unlinkSync(imagePath);
+        }
+      },
       messageID
-    );
+      );
+
+    } catch (err) {
+
+      console.log(
+        chalk.red(`[Help Image Error] ${err.message}`)
+      );
+
+      return api.sendMessage(
+        finalMessage.trim(),
+        threadID,
+        null,
+        messageID
+      );
+    }
 
   } catch (err) {
 
     console.log(
-      chalk.red(
-        `[Help Error] ${err.stack || err.message}`
-      )
+      chalk.red(`[Help Error] ${err.stack || err.message}`)
     );
 
     return api.sendMessage(
