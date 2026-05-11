@@ -6,7 +6,7 @@ const path = require('path');
 module.exports.config = {
   name: "اوامر",
   aliases: ["help", "commands", "cmd", "الاوامر"],
-  version: "5.6",
+  version: "5.7",
   author: "سينكو",
   countDown: 5,
   adminOnly: false,
@@ -17,69 +17,43 @@ module.exports.config = {
 };
 
 async function downloadImage(url) {
-  const imagePath = path.join(__dirname, "cache", "help.jpg");
-
+  const cachePath = path.join(__dirname, "cache");
+  if (!fs.existsSync(cachePath)) fs.mkdirSync(cachePath);
+  
+  const imagePath = path.join(cachePath, "help.jpg");
   const response = await axios({
     url,
     method: "GET",
     responseType: "arraybuffer"
   });
-
   fs.writeFileSync(imagePath, response.data);
-
   return imagePath;
 }
 
 module.exports.run = async function({ api, event, args, config }) {
-
   const { threadID, messageID, senderID } = event;
 
-  const commands = global.commands instanceof Map
-    ? global.commands
-    : new Map(Object.entries(global.commands || {}));
+  // إصلاح: التأكد من جلب الأوامر من global.client.commands أو global.commands
+  const allCommands = global.client?.commands || global.commands;
+  
+  if (!allCommands || (allCommands instanceof Map && allCommands.size === 0)) {
+    return api.sendMessage("❌ لم يتم تحميل أي أوامر بعد أو القائمة فارغة.", threadID, messageID);
+  }
 
-  const prefix = config.prefix || ".";
+  const prefix = config.PREFIX || ".";
 
   try {
-
-    // =========================
     // تفاصيل أمر معين
-    // =========================
-
     if (args[0]) {
-
       const input = args[0].toLowerCase();
-
-      let command = commands.get(input);
-
-      if (!command) {
-
-        for (const [name, value] of commands) {
-
-          if (
-            value &&
-            value.config &&
-            Array.isArray(value.config.aliases) &&
-            value.config.aliases.includes(input)
-          ) {
-            command = value;
-            break;
-          }
-        }
-      }
+      const command = allCommands.get(input) || 
+                      Array.from(allCommands.values()).find(cmd => cmd.config.aliases && cmd.config.aliases.includes(input));
 
       if (!command) {
-
-        return api.sendMessage(
-          `❌ لم يتم العثور على الأمر "${input}"`,
-          threadID,
-          null,
-          messageID
-        );
+        return api.sendMessage(`❌ لم يتم العثور على الأمر "${input}"`, threadID, null, messageID);
       }
 
       const cmd = command.config;
-
       let detailMessage = `⏣────── ✾ ⌬ ✾ ──────⏣\n`;
       detailMessage += `✾ ┇ ⏣ ⟬ الإســم ⟭ : ${cmd.name}\n`;
       detailMessage += `✾ ┇ ◍ الـوصـف : ${cmd.description || "لا يوجد"}\n`;
@@ -87,129 +61,48 @@ module.exports.run = async function({ api, event, args, config }) {
       detailMessage += `✾ ┇ ◍ الـإصـدار : ${cmd.version || "1.0"}\n`;
 
       if (cmd.guide) {
-
-        const usage = typeof cmd.guide === "string"
-          ? cmd.guide
-          : cmd.guide.ar || "";
-
+        const usage = typeof cmd.guide === "string" ? cmd.guide : (cmd.guide.ar || "");
         detailMessage += `✾ ┇\n✾ ┇ ◍ طريقة الاستخدام :\n`;
         detailMessage += `✾ ┇ ⬩ ${usage.replace(/{pn}/g, prefix + cmd.name)}\n`;
       }
-
       detailMessage += `⏣────── ✾ ⌬ ✾ ──────⏣`;
-
-      return api.sendMessage(
-        detailMessage,
-        threadID,
-        null,
-        messageID
-      );
+      return api.sendMessage(detailMessage, threadID, null, messageID);
     }
 
-    // =========================
     // تصنيف الأوامر
-    // =========================
-
     const categories = {};
-
-    const categoryMap = {
-      group: "المجموعة",
-      image: "الصور",
-      media: "الوسائط",
-      admin: "الإدارة",
-      fun: "الترفيه",
-      random: "عشوائي",
-      music: "الموسيقى",
-      video: "الفيديو",
-      ai: "الذكاء الاصطناعي",
-      tools: "الأدوات",
-      utility: "الخدمات السريعة",
-      owner: "المطور",
-      level: "المستوى",
-      game: "اللعب",
-      play: "اللعب"
-    };
-
     const uniqueCommands = [];
+    
+    // تحويل الـ Map إلى Array للتعامل معه
+    const commandList = Array.from(allCommands.values());
 
-    for (const [name, command] of commands) {
+    for (const cmd of commandList) {
+      if (!cmd.config || !cmd.config.name) continue;
+      
+      // منع التكرار
+      if (uniqueCommands.some(c => c.name === cmd.config.name)) continue;
+      
+      // فحص صلاحيات الأدمن (اختياري للإخفاء)
+      if (cmd.config.adminOnly && !config.ADMINBOT.includes(senderID)) continue;
 
-      if (!command || !command.config) continue;
+      uniqueCommands.push(cmd.config);
 
-      const cmd = command.config;
-
-      if (
-        cmd.adminOnly &&
-        Array.isArray(config.adminUIDs) &&
-        !config.adminUIDs.includes(senderID)
-      ) continue;
-
-      if (uniqueCommands.find(c => c.name === cmd.name)) continue;
-
-      uniqueCommands.push(cmd);
-
-      let category = cmd.category || "الترفيه";
-
-      if (
-        ["اقتصاد", "اللعب", "game", "play"].includes(category)
-      ) category = "اللعب";
-
-      if (
-        category === "owner" ||
-        category === "المطور"
-      ) category = "المطور";
-
-      category = categoryMap[category] || category;
-
-      if (!categories[category]) {
-        categories[category] = [];
-      }
-
-      categories[category].push(cmd.name);
+      let category = cmd.config.category || "عام";
+      if (!categories[category]) categories[category] = [];
+      categories[category].push(cmd.config.name);
     }
-
-    const orderedCats = [
-      "المجموعة",
-      "الصور",
-      "الوسائط",
-      "الذكاء الاصطناعي",
-      "الترفيه",
-      "اللعب",
-      "عشوائي",
-      "المطور",
-      "الأدوات"
-    ];
-
-    // =========================
-    // بناء القائمة
-    // =========================
 
     let finalMessage = `⏣────── ✾ ⌬ ✾ ──────⏣\n✾ ┇\n`;
 
-    for (const category of orderedCats) {
-
-      const cmds = categories[category];
-
-      if (!cmds || !cmds.length) continue;
-
-      if (
-        category === "المطور" &&
-        Array.isArray(config.adminUIDs) &&
-        !config.adminUIDs.includes(senderID)
-      ) continue;
-
+    // ترتيب التصنيفات وعرضها
+    for (const category in categories) {
       finalMessage += `✾ ┇ ⏣ ⟬ قـسـم ${category.toUpperCase()} ⟭\n`;
-
+      const cmds = categories[category];
+      
       for (let i = 0; i < cmds.length; i += 3) {
-
-        const row = cmds
-          .slice(i, i + 3)
-          .map(cmd => `◍ ${cmd}`)
-          .join(" ");
-
+        const row = cmds.slice(i, i + 3).map(c => `◍ ${c}`).join("  ");
         finalMessage += `✾ ┇ ${row}\n`;
       }
-
       finalMessage += `✾ ┇ ⸻⸻⸻⸻⸻\n✾ ┇\n`;
     }
 
@@ -217,54 +110,18 @@ module.exports.run = async function({ api, event, args, config }) {
     finalMessage += ` ⠇عـدد الأوامـر: ${uniqueCommands.length}\n`;
     finalMessage += ` ⠇الـمـطـوࢪ: sakran 𓆩☆𓆪`;
 
-    // =========================
-    // إرسال الصورة
-    // =========================
-
     try {
-
-      const imagePath = await downloadImage(
-        "https://i.ibb.co/FZCHwt9/received-1740662803574945.webp"
-      );
-
+      const imagePath = await downloadImage("https://i.ibb.co/FZCHwt9/received-1740662803574945.webp");
       return api.sendMessage({
         body: finalMessage.trim(),
         attachment: fs.createReadStream(imagePath)
-      },
-      threadID,
-      () => {
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
-        }
-      },
-      messageID
-      );
-
+      }, threadID, () => fs.unlinkSync(imagePath), messageID);
     } catch (err) {
-
-      console.log(
-        chalk.red(`[Help Image Error] ${err.message}`)
-      );
-
-      return api.sendMessage(
-        finalMessage.trim(),
-        threadID,
-        null,
-        messageID
-      );
+      return api.sendMessage(finalMessage.trim(), threadID, messageID);
     }
 
   } catch (err) {
-
-    console.log(
-      chalk.red(`[Help Error] ${err.stack || err.message}`)
-    );
-
-    return api.sendMessage(
-      `❌ حدث خطأ:\n${err.message}`,
-      threadID,
-      null,
-      messageID
-    );
+    console.error(err);
+    return api.sendMessage(`❌ حدث خطأ داخلي: ${err.message}`, threadID, messageID);
   }
 };
