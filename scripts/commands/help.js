@@ -1,8 +1,8 @@
 const chalk = require('chalk');
 
 module.exports.config = {
-  name: "الاوامر",
-  aliases: ["help", "commands", "cmd"],
+  name: "اوامر",
+  aliases: ["help", "commands", "cmd", "الاوامر"],
   version: "1.0",
   author: "سينكو",
   countDown: 5,
@@ -19,9 +19,9 @@ module.exports.run = async function({ api, event, args, config }) {
 
   const commands = global.commands instanceof Map
     ? global.commands
-    : new Map(Object.entries(global.commands));
+    : new Map(Object.entries(global.commands || {}));
 
-  const prefix = config.prefix;
+  const prefix = config.prefix || ".";
 
   try {
 
@@ -69,62 +69,55 @@ module.exports.run = async function({ api, event, args, config }) {
       msg += `▸ المطور: سـيـنـكـو\n`;
       msg += `┕━━━━━━━━━━━━━━━┙\n\n`;
 
-      msg += `『 ${prefix}الاوامر + اسم الأمر للتفاصيل 』`;
+      msg += `『 ${prefix}اوامر + اسم الأمر للتفاصيل 』`;
 
-      api.sendMessage(
+      return api.sendMessage(
         msg,
         threadID,
         null,
         messageID
       );
+    }
 
-      console.log(
-        chalk.cyan(
-          `[Help] تم طلب قائمة الأوامر | المجموعة: ${threadID}`
-        )
-      );
+    const commandName = args[0].toLowerCase();
 
-    } else {
+    let command = commands.get(commandName);
 
-      const commandName = args[0].toLowerCase();
+    if (!command) {
 
-      let command = commands.get(commandName);
+      for (const [name, value] of commands) {
 
-      if (!command) {
-
-        for (const [name, value] of commands) {
-
-          if (
-            value &&
-            value.config &&
-            Array.isArray(value.config.aliases) &&
-            value.config.aliases.includes(commandName)
-          ) {
-            command = value;
-            break;
-          }
+        if (
+          value &&
+          value.config &&
+          Array.isArray(value.config.aliases) &&
+          value.config.aliases.includes(commandName)
+        ) {
+          command = value;
+          break;
         }
       }
+    }
 
-      if (!command) {
+    if (!command) {
 
-        return api.sendMessage(
-          `❌ الأمر "${commandName}" غير موجود.`,
-          threadID,
-          null,
-          messageID
-        );
-      }
+      return api.sendMessage(
+        `❌ الأمر "${commandName}" غير موجود.`,
+        threadID,
+        null,
+        messageID
+      );
+    }
 
-      const c = command.config;
+    const c = command.config;
 
-      const usage =
-        c.guide?.replace(
-          /{pn}/g,
-          `${prefix}${c.name}`
-        ) || `${prefix}${c.name}`;
+    const usage =
+      c.guide?.replace(
+        /{pn}/g,
+        `${prefix}${c.name}`
+      ) || `${prefix}${c.name}`;
 
-      const res = `
+    const res = `
 ┌  ＮＯＢＡＲＡ • ＩＮＦＯ  ┐
 ┕━━━━━━━━━━━━━━━┙
 
@@ -142,13 +135,12 @@ module.exports.run = async function({ api, event, args, config }) {
 ┕  ＤＥＶ BY ＳＩＮＫＯ  ┙
 `.trim();
 
-      api.sendMessage(
-        res,
-        threadID,
-        null,
-        messageID
-      );
-    }
+    return api.sendMessage(
+      res,
+      threadID,
+      null,
+      messageID
+    );
 
   } catch (err) {
 
@@ -158,8 +150,8 @@ module.exports.run = async function({ api, event, args, config }) {
       )
     );
 
-    api.sendMessage(
-      "❌ حدث خطأ في معالج الأوامر.",
+    return api.sendMessage(
+      `❌ حدث خطأ:\n${err.message}`,
       threadID,
       null,
       messageID
