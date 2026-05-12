@@ -1,127 +1,67 @@
-const chalk = require('chalk');
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
 
-module.exports.config = {
-  name: "ويسو",
-  aliases: ["ai", "ذكاء"],
-  version: "1.0",
-  author: "سينكو",
-  countDown: 5,
-  adminOnly: false,
-  description: "ذكاء اصطناعي للردود",
-  category: "ai",
-  guide: "{pn} [سؤال]",
-  usePrefix: false
-};
+module.exports = {
+  config: {
+    name: "ويسو",
+    version: "1.0",
+    author: "سينكو",
+    countDown: 5,
+    role: 0,
+    description: "ذكاء اصطناعي للردود نسخة GoatBot",
+    category: "ai",
+    guide: {
+      en: "{pn} [سؤال]"
+    }
+  },
 
-module.exports.run = async function({ api, event, args }) {
-  const { threadID, messageID, senderID } = event;
+  onStart: async function ({ api, event, args, message, getLang }) {
+    const query = args.join(" ");
 
-  const query = args.join(" ").trim();
-
-  try {
-    api.setMessageReaction("⏳", messageID, () => {}, true);
-
-    // لو ما كتب شيء
     if (!query) {
-      api.setMessageReaction("❌", messageID, () => {}, true);
-      return api.sendMessage("⚠️ اكتب شيء بعد الأمر.", threadID, messageID);
+      return message.reply("⚠️ أكتب كاش حاجة باش نجاوبك.");
     }
 
-    const response = await askAI(query);
+    try {
+      message.reaction("⏳");
 
-    api.sendMessage(response, threadID, (err, info) => {
-      if (!err) {
-        api.setMessageReaction("✅", messageID, () => {}, true);
+      const res = await axios.get(`https://api.pollinations.ai/prompt/${encodeURIComponent(query)}`);
+      const respond = res.data;
 
-        if (!global.client.handleReply)
-          global.client.handleReply = [];
+      const info = await message.reply(respond);
+      message.reaction("✅");
 
-        global.client.handleReply.push({
-          name: module.exports.config.name,
-          messageID: info.messageID,
-          author: senderID
-        });
-      }
-    }, messageID);
+      global.GoatBot.onReply.set(info.messageID, {
+        commandName: this.config.name,
+        messageID: info.messageID,
+        author: event.senderID
+      });
 
-    console.log(
-      chalk.cyan(
-        `[AI] تم استخدام الأمر بواسطة: ${senderID} في المجموعة: ${threadID}`
-      )
-    );
+    } catch (p) {
+      message.reaction("❌");
+      return message.reply("⚠️ صرا مشكل مع الـ API.");
+    }
+  },
 
-  } catch (error) {
-    api.setMessageReaction("❌", messageID, () => {}, true);
+  onReply: async function ({ api, event, Reply, message }) {
+    const { author } = Reply;
+    if (event.senderID != author) return;
 
-    api.sendMessage(
-      "⚠️ صار خطأ أثناء الاتصال بالذكاء الاصطناعي.",
-      threadID,
-      messageID
-    );
+    try {
+      message.reaction("⏳");
 
-    console.log(chalk.red(`[AI ERROR] ${error.message}`));
+      const res = await axios.get(`https://api.pollinations.ai/prompt/${encodeURIComponent(event.body)}`);
+      const respond = res.data;
+
+      const info = await message.reply(respond);
+      message.reaction("✅");
+
+      global.GoatBot.onReply.set(info.messageID, {
+        commandName: this.config.name,
+        messageID: info.messageID,
+        author: event.senderID
+      });
+    } catch (p) {
+      message.reaction("❌");
+    }
   }
 };
-
-module.exports.handleReply = async function({ api, event, handleReply }) {
-  const { threadID, messageID, senderID, body } = event;
-
-  if (handleReply.author != senderID) return;
-
-  try {
-    api.setMessageReaction("⏳", messageID, () => {}, true);
-
-    const response = await askAI(body);
-
-    api.sendMessage(response, threadID, (err, info) => {
-      if (!err) {
-        api.setMessageReaction("✅", messageID, () => {}, true);
-
-        global.client.handleReply.push({
-          name: module.exports.config.name,
-          messageID: info.messageID,
-          author: senderID
-        });
-      }
-    }, messageID);
-
-  } catch (error) {
-    api.setMessageReaction("❌", messageID, () => {}, true);
-
-    api.sendMessage(
-      "⚠️ فشل الرد من الذكاء الاصطناعي.",
-      threadID,
-      messageID
-    );
-
-    console.log(chalk.red(`[HANDLE REPLY ERROR] ${error.message}`));
-  }
-};
-
-async function askAI(query) {
-
-  try {
-
-    const res = await axios.get(
-      'https://api.simsimi.vn/v1/simtalk',
-      {
-        params: {
-          text: query,
-          lc: "ar"
-        }
-      }
-    );
-
-    return (
-      res.data?.message ||
-      "⚠️ لم يتم الحصول على رد."
-    );
-
-  } catch (e) {
-    console.log("API Error:", e.response?.data || e.message);
-    throw e;
-  }
-}
