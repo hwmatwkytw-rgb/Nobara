@@ -1,67 +1,112 @@
+const chalk = require('chalk');
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 
-module.exports = {
-  config: {
-    name: "ويسو",
-    version: "1.0",
-    author: "سينكو",
-    countDown: 5,
-    role: 0,
-    description: "ذكاء اصطناعي للردود نسخة GoatBot",
-    category: "ai",
-    guide: {
-      en: "{pn} [سؤال]"
-    }
-  },
+module.exports.config = {
+  name: "ويسو",
+  aliases: ["ai", "ذكاء"],
+  version: "1.3",
+  author: "سينكو",
+  countDown: 2,
+  adminOnly: false,
+  description: "ذكاء اصطناعي سريع جداً",
+  category: "ai",
+  guide: "{pn} [سؤال]",
+  usePrefix: true,
+};
 
-  onStart: async function ({ api, event, args, message, getLang }) {
-    const query = args.join(" ");
+module.exports.run = async function ({ api, event, args }) {
+  const { threadID, messageID, senderID } = event;
+  const query = args.join(" ");
 
+  try {
     if (!query) {
-      return message.reply("⚠️ أكتب كاش حاجة باش نجاوبك.");
+      return api.sendMessage(
+        "⚠️ اكتب حاجة باش نجاوبك.",
+        threadID,
+        messageID
+      );
     }
 
-    try {
-      message.reaction("⏳");
+    api.setMessageReaction("⏳", messageID, () => {}, true);
 
-      const res = await axios.get(`https://api.pollinations.ai/prompt/${encodeURIComponent(query)}`);
-      const respond = res.data;
+    const res = await axios.get(
+      `https://text.pollinations.ai/${encodeURIComponent(query)}?model=openai`
+    );
 
-      const info = await message.reply(respond);
-      message.reaction("✅");
+    const respond = res.data;
 
-      global.GoatBot.onReply.set(info.messageID, {
-        commandName: this.config.name,
-        messageID: info.messageID,
-        author: event.senderID
-      });
+    api.sendMessage(
+      respond,
+      threadID,
+      (err, info) => {
+        if (err) return;
 
-    } catch (p) {
-      message.reaction("❌");
-      return message.reply("⚠️ صرا مشكل مع الـ API.");
-    }
-  },
+        api.setMessageReaction("✅", messageID, () => {}, true);
 
-  onReply: async function ({ api, event, Reply, message }) {
-    const { author } = Reply;
-    if (event.senderID != author) return;
+        global.client.handleReply.push({
+          name: this.config.name,
+          messageID: info.messageID,
+          author: senderID
+        });
+      },
+      messageID
+    );
 
-    try {
-      message.reaction("⏳");
+  } catch (error) {
+    api.setMessageReaction("❌", messageID, () => {}, true);
 
-      const res = await axios.get(`https://api.pollinations.ai/prompt/${encodeURIComponent(event.body)}`);
-      const respond = res.data;
+    api.sendMessage(
+      "⚠️ صرا مشكل في الـ API.",
+      threadID,
+      messageID
+    );
 
-      const info = await message.reply(respond);
-      message.reaction("✅");
+    console.log(chalk.red(`[AI ERROR] ${error.message}`));
+  }
+};
 
-      global.GoatBot.onReply.set(info.messageID, {
-        commandName: this.config.name,
-        messageID: info.messageID,
-        author: event.senderID
-      });
-    } catch (p) {
-      message.reaction("❌");
-    }
+module.exports.handleReply = async function ({ api, event, handleReply }) {
+  const { threadID, messageID, senderID, body } = event;
+
+  try {
+    if (senderID != handleReply.author) return;
+
+    api.setMessageReaction("⏳", messageID, () => {}, true);
+
+    const res = await axios.get(
+      `https://text.pollinations.ai/${encodeURIComponent(body)}?model=openai`
+    );
+
+    const respond = res.data;
+
+    api.sendMessage(
+      respond,
+      threadID,
+      (err, info) => {
+        if (err) return;
+
+        api.setMessageReaction("✅", messageID, () => {}, true);
+
+        global.client.handleReply.push({
+          name: "ويسو",
+          messageID: info.messageID,
+          author: senderID
+        });
+      },
+      messageID
+    );
+
+  } catch (error) {
+    api.setMessageReaction("❌", messageID, () => {}, true);
+
+    api.sendMessage(
+      "⚠️ حدث خطأ أثناء الرد.",
+      threadID,
+      messageID
+    );
+
+    console.log(chalk.red(`[HANDLE REPLY ERROR] ${error.message}`));
   }
 };
