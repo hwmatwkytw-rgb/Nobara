@@ -4,7 +4,7 @@ module.exports.config = {
   name: "help",
   aliases: ["الاوامر", "اوامر", "مساعدة"],
   version: "1.0",
-  author: "sinko",
+  author: "Hridoy",
   countDown: 5,
   adminOnly: false,
   description: "عرض قائمة الأوامر أو تفاصيل أمر معين",
