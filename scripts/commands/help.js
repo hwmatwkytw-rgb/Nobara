@@ -1,4 +1,3 @@
-const chalk = require('chalk');
 const axios = require('axios');
 const fs = require('fs-extra');
 const path = require('path');
@@ -6,7 +5,7 @@ const path = require('path');
 module.exports.config = {
   name: "اوامر",
   aliases: ["help", "commands", "cmd", "الاوامر"],
-  version: "5.8",
+  version: "5.9",
   author: "سينكو",
   countDown: 5,
   adminOnly: false,
@@ -20,14 +19,8 @@ async function downloadImage(url) {
   try {
     const cachePath = path.join(__dirname, "cache");
     if (!fs.existsSync(cachePath)) fs.mkdirSync(cachePath, { recursive: true });
-
     const imagePath = path.join(cachePath, "help.jpg");
-    const response = await axios({
-      url,
-      method: "GET",
-      responseType: "arraybuffer",
-      timeout: 10000
-    });
+    const response = await axios({ url, method: "GET", responseType: "arraybuffer", timeout: 10000 });
     fs.writeFileSync(imagePath, response.data);
     return imagePath;
   } catch (e) {
@@ -35,23 +28,34 @@ async function downloadImage(url) {
   }
 }
 
+function getCommandsMap() {
+  // نجرب كل الأماكن الممكنة
+  if (global.client?.commands instanceof Map && global.client.commands.size > 0) return global.client.commands;
+  if (global.client?.cmds instanceof Map && global.client.cmds.size > 0) return global.client.cmds;
+  if (global.commands instanceof Map && global.commands.size > 0) return global.commands;
+  if (global.cmds instanceof Map && global.cmds.size > 0) return global.cmds;
+  if (global.handle?.commands instanceof Map && global.handle.commands.size > 0) return global.handle.commands;
+
+  // لو ما لقينا شيء، نرجع null
+  return null;
+}
+
 module.exports.run = async function({ api, event, args, config }) {
   const { threadID, messageID, senderID } = event;
 
   try {
-    // 1. فحص جلب الأوامر
-    const allCommands = global.client?.commands || global.commands;
+    const allCommands = getCommandsMap();
+
     if (!allCommands) {
-      throw new Error("global.client.commands و global.commands غير موجودين");
-    }
-    if (allCommands instanceof Map && allCommands.size === 0) {
-      throw new Error("قائمة الأوامر فارغة");
+      // ديebug: نطبع شنو موجود في global
+      const keys = Object.keys(global).filter(k => k.includes('command') || k.includes('cmd') || k.includes('client'));
+      throw new Error(`لم أجد الأوامر في أي مكان. المتغيرات الموجودة: ${keys.join(', ')}`);
     }
 
     const prefix = config.PREFIX || ".";
     const adminList = Array.isArray(config.ADMINBOT)? config.ADMINBOT : [];
 
-    // 2. تفاصيل أمر معين
+    // تفاصيل أمر معين
     if (args[0]) {
       const input = args[0].toLowerCase();
       const command = allCommands.get(input) ||
@@ -77,7 +81,7 @@ module.exports.run = async function({ api, event, args, config }) {
       return api.sendMessage(detailMessage, threadID, messageID);
     }
 
-    // 3. تصنيف الأوامر
+    // تصنيف الأوامر
     const categories = {};
     const uniqueCommands = [];
     const commandList = Array.from(allCommands.values());
@@ -94,7 +98,6 @@ module.exports.run = async function({ api, event, args, config }) {
     }
 
     let finalMessage = `⏣────── ✾ ⌬ ✾ ──────⏣\n✾ ┇\n`;
-
     for (const category in categories) {
       finalMessage += `✾ ┇ ⏣ ⟬ قـسـم ${category.toUpperCase()} ⟭\n`;
       const cmds = categories[category];
@@ -109,23 +112,19 @@ module.exports.run = async function({ api, event, args, config }) {
     finalMessage += ` ⠇عـدد الأوامـر: ${uniqueCommands.length}\n`;
     finalMessage += ` ⠇الـمـطـوࢪ: sakran 𓆩☆𓆪`;
 
-    // 4. تحميل الصورة وإرسالها
     try {
       const imagePath = await downloadImage("https://i.ibb.co/FZCHwt9/received-1740662803574945.webp");
       return api.sendMessage({
         body: finalMessage.trim(),
         attachment: fs.createReadStream(imagePath)
       }, threadID, () => fs.unlinkSync(imagePath), messageID);
-    } catch (imgErr) {
-      // لو فشلت الصورة، ابعت النص لوحده
-      await api.sendMessage(finalMessage.trim() + "\n\n⚠️ ملاحظة: فشل تحميل الصورة", threadID, messageID);
-      throw imgErr; // نرمي الخطأ عشان يطلع تحت
+    } catch {
+      return api.sendMessage(finalMessage.trim(), threadID, messageID);
     }
 
   } catch (err) {
-    // هذا هو الجزء المهم: يرجع لك الخطأ الحقي
-    const errorMsg = `❌ تعطل الأمر\nالسبب: ${err.message}\n\nStack:\n${err.stack}`;
-    console.error(errorMsg);
+    const errorMsg = `❌ تعطل الأمر\nالسبب: ${err.message}`;
+    console.error(err);
     return api.sendMessage(errorMsg, threadID, messageID);
   }
 };
