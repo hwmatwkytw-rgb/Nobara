@@ -2,14 +2,14 @@ const chalk = require('chalk');
 
 module.exports.config = {
   name: "help",
-  aliases: ["الاوامر", "اوامر", "مساعدة"],
+  aliases: ["commands", "cmd"],
   version: "1.0",
   author: "Hridoy",
   countDown: 5,
   adminOnly: false,
-  description: "عرض قائمة الأوامر أو تفاصيل أمر معين",
-  category: "الخدمات",
-  guide: "{pn} [اسم الأمر] - اتركه فارغاً لرؤية كل الأوامر",
+  description: "Displays a list of commands or detailed info about a specific command",
+  category: "Utility",
+  guide: "{pn} [command name] - Leave blank to see all commands",
   usePrefix: true
 };
 
@@ -20,25 +20,21 @@ module.exports.run = async function({ api, event, args, config }) {
 
   try {
     if (!args.length) {
-      let msg = `✨ [ دليل المبتدئين - الصفحة 1 ] ✨\n`;
+      let msg = `✨ [ Guide For Beginners - Page 1 ] ✨\n`;
 
       const categories = {};
       for (const [name, value] of commands) {
-        // التحقق من صلاحيات المسؤول
         if (value.config.adminOnly && !config.adminUIDs.includes(senderID)) continue;
-        
-        // الحفاظ على التصنيف الأصلي كما هو لضمان عدم ضياع الأوامر
-        const category = value.config.category || "غير مصنف";
+        const category = value.config.category || "Uncategorized";
         categories[category] = categories[category] || { commands: [] };
         categories[category].commands.push(name);
       }
 
-      // ترتيب التصنيفات وعرضها
       Object.keys(categories).sort().forEach((category) => {
-        msg += `\n╭──── [ قسم: ${category.toUpperCase()} ]\n│ ✧ ${categories[category].commands.sort().join(" ✧ ")}\n╰───────────────◊`;
+        msg += `\n╭──── [ ${category.toUpperCase()} ]\n│ ✧${categories[category].commands.sort().join(" ✧ ")}\n╰───────────────◊`;
       });
 
-      msg += `\n\n╭─『 ${config.botName || "NexaloSim"} 』\n╰‣ إجمالي الأوامر: ${commands.size}\n╰‣ الصفحة 1 من 1\n╰‣ بوت ماسنجر شخصي ✨\n╰‣ المطور: Hridoy`;
+      msg += `\n\n╭─『 ${config.botName || "NexaloSim"} 』\n╰‣ Total commands: ${commands.size}\n╰‣ Page 1 of 1\n╰‣ A personal Messenger bot ✨\n╰‣ ADMIN: Hridoy`;
 
       api.sendMessage(msg, threadID, messageID);
       console.log(chalk.cyan(`[Help] Full command list requested | ThreadID: ${threadID}`));
@@ -47,7 +43,7 @@ module.exports.run = async function({ api, event, args, config }) {
       const command = commands.get(commandName) || commands.get([...commands].find(([_, v]) => v.config.aliases?.includes(commandName))?.[0]);
 
       if (!command) {
-        api.sendMessage(`❌ الأمر "${commandName}" غير موجود في قائمة الأوامر.`, threadID, messageID);
+        api.sendMessage(`❌ Command "${commandName}" not found.`, threadID, messageID);
         console.log(chalk.red(`[Help Error] Command "${commandName}" not found | ThreadID: ${threadID}`));
         return;
       }
@@ -56,21 +52,21 @@ module.exports.run = async function({ api, event, args, config }) {
       const usage = c.guide?.replace(/{pn}/g, `${prefix}${c.name}`) || `${prefix}${c.name}`;
 
       const res = `
-╭──── الاسم ───♡
+╭──── NAME ───♡
 │ ${c.name}
-├── معلومات
-│ الوصف: ${c.description}
-│ الاختصارات: ${c.aliases?.join(", ") || "لا يوجد"}
-│ الإصدار: ${c.version || "1.0"}
-│ الصلاحية: ${c.adminOnly ? "للمسؤولين فقط" : "للجميع"}
-│ الانتظار: ${c.countDown || 1} ثانية
-│ القسم: ${c.category || "غير مصنف"}
-│ المطور: ${c.author || "Hridoy"}
-├── الاستخدام
+├── INFO
+│ Description: ${c.description}
+│ Aliases: ${c.aliases?.join(", ") || "None"}
+│ Version: ${c.version || "1.0"}
+│ Access: ${c.adminOnly ? "Admin Only" : "All Users"}
+│ Cooldown: ${c.countDown || 1}s
+│ Category: ${c.category || "Uncategorized"}
+│ Author: ${c.author || "Hridoy"}
+├── Usage
 │ ${usage}
-├── ملاحظات
-│ استخدم ${prefix}help لعرض القائمة كاملة
-│ <نص> = إلزامي ، [نص] = اختياري
+├── Notes
+│ Use ${prefix}help for all commands
+│ <text> = required, [text] = optional
 ╰────────────♡`.trim();
 
       api.sendMessage(res, threadID, messageID);
@@ -78,6 +74,6 @@ module.exports.run = async function({ api, event, args, config }) {
     }
   } catch (err) {
     console.log(chalk.red(`[Help Error] ${err.message}`));
-    api.sendMessage("❌ حدث خطأ داخلي أثناء محاولة عرض المساعدة.", threadID, messageID);
+    api.sendMessage("❌ Something went wrong with the help command.", threadID, messageID);
   }
 };
