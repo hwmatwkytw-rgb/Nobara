@@ -1,6 +1,20 @@
 {
-    "botName": "Nobara",
-    "prefix": ".",
-    "adminName": "whiskey ",
-    "adminUIDs": ["100081948980908", "1000yyyyyy"]
-  }
+  "botName": "Nobara",
+  "prefix": ".",
+  "adminName": "Wael",
+  "adminUIDs": [
+    "100081948980908",
+    "61581827102601"
+  ],
+  "developerID": "61581827102601",
+  "language": "ar",
+  "database": {
+    "type": "mongodb",
+    "uri": ""
+  },
+  "commandFee": 0,
+  "allowInstallConfig": true,
+  "autoLoad": true,
+  "loadSuccessMsg": true,
+  "checkUpdate": false
+}
