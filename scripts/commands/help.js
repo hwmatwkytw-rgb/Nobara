@@ -17,40 +17,44 @@ module.exports.config = {
 };
 
 async function downloadImage(url) {
-  const cachePath = path.join(__dirname, "cache");
-  if (!fs.existsSync(cachePath)) fs.mkdirSync(cachePath);
-  
-  const imagePath = path.join(cachePath, "help.jpg");
-  const response = await axios({
-    url,
-    method: "GET",
-    responseType: "arraybuffer"
-  });
-  fs.writeFileSync(imagePath, response.data);
-  return imagePath;
+  try {
+    const cachePath = path.join(__dirname, "cache");
+    if (!fs.existsSync(cachePath)) fs.mkdirSync(cachePath, { recursive: true });
+
+    const imagePath = path.join(cachePath, "help.jpg");
+    const response = await axios({
+      url,
+      method: "GET",
+      responseType: "arraybuffer",
+      timeout: 10000
+    });
+    fs.writeFileSync(imagePath, response.data);
+    return imagePath;
+  } catch (e) {
+    return null; // لو فشل التحميل رجع null
+  }
 }
 
 module.exports.run = async function({ api, event, args, config }) {
   const { threadID, messageID, senderID } = event;
 
-  // إصلاح: التأكد من جلب الأوامر من global.client.commands أو global.commands
   const allCommands = global.client?.commands || global.commands;
-  
+
   if (!allCommands || (allCommands instanceof Map && allCommands.size === 0)) {
     return api.sendMessage("❌ لم يتم تحميل أي أوامر بعد أو القائمة فارغة.", threadID, messageID);
   }
 
   const prefix = config.PREFIX || ".";
+  const adminList = config.ADMINBOT || []; // هنا التصحيح
 
   try {
-    // تفاصيل أمر معين
     if (args[0]) {
       const input = args[0].toLowerCase();
-      const command = allCommands.get(input) || 
+      const command = allCommands.get(input) ||
                       Array.from(allCommands.values()).find(cmd => cmd.config.aliases && cmd.config.aliases.includes(input));
 
       if (!command) {
-        return api.sendMessage(`❌ لم يتم العثور على الأمر "${input}"`, threadID, null, messageID);
+        return api.sendMessage(`❌ لم يتم العثور على الأمر "${input}"`, threadID, messageID);
       }
 
       const cmd = command.config;
@@ -61,29 +65,24 @@ module.exports.run = async function({ api, event, args, config }) {
       detailMessage += `✾ ┇ ◍ الـإصـدار : ${cmd.version || "1.0"}\n`;
 
       if (cmd.guide) {
-        const usage = typeof cmd.guide === "string" ? cmd.guide : (cmd.guide.ar || "");
+        const usage = typeof cmd.guide === "string"? cmd.guide : (cmd.guide.ar || "");
         detailMessage += `✾ ┇\n✾ ┇ ◍ طريقة الاستخدام :\n`;
         detailMessage += `✾ ┇ ⬩ ${usage.replace(/{pn}/g, prefix + cmd.name)}\n`;
       }
       detailMessage += `⏣────── ✾ ⌬ ✾ ──────⏣`;
-      return api.sendMessage(detailMessage, threadID, null, messageID);
+      return api.sendMessage(detailMessage, threadID, messageID);
     }
 
-    // تصنيف الأوامر
     const categories = {};
     const uniqueCommands = [];
-    
-    // تحويل الـ Map إلى Array للتعامل معه
     const commandList = Array.from(allCommands.values());
 
     for (const cmd of commandList) {
-      if (!cmd.config || !cmd.config.name) continue;
-      
-      // منع التكرار
+      if (!cmd.config ||!cmd.config.name) continue;
+
       if (uniqueCommands.some(c => c.name === cmd.config.name)) continue;
-      
-      // فحص صلاحيات الأدمن (اختياري للإخفاء)
-      if (cmd.config.adminOnly && !config.ADMINBOT.includes(senderID)) continue;
+
+      if (cmd.config.adminOnly &&!adminList.includes(senderID)) continue;
 
       uniqueCommands.push(cmd.config);
 
@@ -94,29 +93,28 @@ module.exports.run = async function({ api, event, args, config }) {
 
     let finalMessage = `⏣────── ✾ ⌬ ✾ ──────⏣\n✾ ┇\n`;
 
-    // ترتيب التصنيفات وعرضها
     for (const category in categories) {
       finalMessage += `✾ ┇ ⏣ ⟬ قـسـم ${category.toUpperCase()} ⟭\n`;
       const cmds = categories[category];
-      
+
       for (let i = 0; i < cmds.length; i += 3) {
-        const row = cmds.slice(i, i + 3).map(c => `◍ ${c}`).join("  ");
+        const row = cmds.slice(i, i + 3).map(c => `◍ ${c}`).join(" ");
         finalMessage += `✾ ┇ ${row}\n`;
       }
-      finalMessage += `✾ ┇ ⸻⸻⸻⸻⸻\n✾ ┇\n`;
+      finalMessage += `✾ ┇ ⸻⸻\n✾ ┇\n`;
     }
 
     finalMessage += `⏣────── ✾ ⌬ ✾ ──────⏣\n`;
     finalMessage += ` ⠇عـدد الأوامـر: ${uniqueCommands.length}\n`;
     finalMessage += ` ⠇الـمـطـوࢪ: sakran 𓆩☆𓆪`;
 
-    try {
-      const imagePath = await downloadImage("https://i.ibb.co/FZCHwt9/received-1740662803574945.webp");
+    const imagePath = await downloadImage("https://i.ibb.co/FZCHwt9/received-1740662803574945.webp");
+    if (imagePath) {
       return api.sendMessage({
         body: finalMessage.trim(),
         attachment: fs.createReadStream(imagePath)
       }, threadID, () => fs.unlinkSync(imagePath), messageID);
-    } catch (err) {
+    } else {
       return api.sendMessage(finalMessage.trim(), threadID, messageID);
     }
 
