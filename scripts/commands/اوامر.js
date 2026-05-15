@@ -1,260 +1,83 @@
 const chalk = require('chalk');
 
 module.exports.config = {
-  name: "قائمة",
-  aliases: ["اوامر", "help", "cmd"],
-  version: "1.5.0",
-  author: "Wael",
+  name: "help",
+  aliases: ["الاوامر", "اوامر", "مساعدة"],
+  version: "1.0",
+  author: "sinko",
   countDown: 5,
   adminOnly: false,
-  description: "عرض قائمة أوامر البوت حسب الفئات",
-  category: "النظام",
-  guide: "{pn} | {pn} <اسم الأمر>",
-  usePrefix: true,
+  description: "عرض قائمة الأوامر أو تفاصيل أمر معين",
+  category: "الخدمات",
+  guide: "{pn} [اسم الأمر] - اتركه فارغاً لرؤية كل الأوامر",
+  usePrefix: true
 };
 
-module.exports.run = async function ({
-  api,
-  event,
-  args,
-  config
-}) {
-
-  const {
-    threadID,
-    messageID
-  } = event;
+module.exports.run = async function({ api, event, args, config }) {
+  const { threadID, messageID, senderID } = event;
+  const commands = new Map(global.commands);
+  const prefix = config.prefix;
 
   try {
+    if (!args.length) {
+      let msg = `✨ [ دليل المبتدئين - الصفحة 1 ] ✨\n`;
 
-    api.setMessageReaction(
-      "⏳",
-      messageID,
-      () => {},
-      true
-    );
+      const categories = {};
+      for (const [name, value] of commands) {
+        // التحقق من صلاحيات المسؤول
+        if (value.config.adminOnly && !config.adminUIDs.includes(senderID)) continue;
+        
+        // الحفاظ على التصنيف الأصلي كما هو لضمان عدم ضياع الأوامر
+        const category = value.config.category || "غير مصنف";
+        categories[category] = categories[category] || { commands: [] };
+        categories[category].commands.push(name);
+      }
 
-    // جلب الأوامر
-    let commands = null;
+      // ترتيب التصنيفات وعرضها
+      Object.keys(categories).sort().forEach((category) => {
+        msg += `\n╭──── [ قسم: ${category.toUpperCase()} ]\n│ ✧ ${categories[category].commands.sort().join(" ✧ ")}\n╰───────────────◊`;
+      });
 
-    if (
-      global.GoatBot?.commands instanceof Map
-    ) {
+      msg += `\n\n╭─『 ${config.botName || "NexaloSim"} 』\n╰‣ إجمالي الأوامر: ${commands.size}\n╰‣ الصفحة 1 من 1\n╰‣ بوت ماسنجر شخصي ✨\n╰‣ المطور: Hridoy`;
 
-      commands =
-        global.GoatBot.commands;
-
-    } else if (
-      global.client?.commands instanceof Map
-    ) {
-
-      commands =
-        global.client.commands;
-
-    } else if (
-      global.client?.cmds instanceof Map
-    ) {
-
-      commands =
-        global.client.cmds;
-    }
-
-    // فشل الجلب
-    if (
-      !commands ||
-      commands.size === 0
-    ) {
-
-      api.setMessageReaction(
-        "❌",
-        messageID,
-        () => {},
-        true
-      );
-
-      return api.sendMessage(
-        "⚠️ لم أجد قائمة الأوامر.",
-        threadID,
-        messageID
-      );
-    }
-
-    const prefix =
-      config.PREFIX || ".";
-
-    // ═══════════════════
-    // تفاصيل أمر
-    // ═══════════════════
-
-    if (
-      args[0] &&
-      args[0].toLowerCase() !== "الكل"
-    ) {
-
-      const input =
-        args[0].toLowerCase();
-
-      const command =
-        commands.get(input) ||
-        Array.from(
-          commands.values()
-        ).find(cmd =>
-          cmd.config?.aliases?.includes(
-            input
-          )
-        );
+      api.sendMessage(msg, threadID, messageID);
+      console.log(chalk.cyan(`[Help] Full command list requested | ThreadID: ${threadID}`));
+    } else {
+      const commandName = args[0].toLowerCase();
+      const command = commands.get(commandName) || commands.get([...commands].find(([_, v]) => v.config.aliases?.includes(commandName))?.[0]);
 
       if (!command) {
-
-        api.setMessageReaction(
-          "❌",
-          messageID,
-          () => {},
-          true
-        );
-
-        return api.sendMessage(
-          `❌ | الأمر "${input}" غير موجود.`,
-          threadID,
-          messageID
-        );
+        api.sendMessage(`❌ الأمر "${commandName}" غير موجود في قائمة الأوامر.`, threadID, messageID);
+        console.log(chalk.red(`[Help Error] Command "${commandName}" not found | ThreadID: ${threadID}`));
+        return;
       }
 
-      const cmd =
-        command.config;
+      const c = command.config;
+      const usage = c.guide?.replace(/{pn}/g, `${prefix}${c.name}`) || `${prefix}${c.name}`;
 
-      let msg = `
-◈ ──『 تـفاصيل الأمـر 』── ◈
+      const res = `
+╭──── الاسم ───♡
+│ ${c.name}
+├── معلومات
+│ الوصف: ${c.description}
+│ الاختصارات: ${c.aliases?.join(", ") || "لا يوجد"}
+│ الإصدار: ${c.version || "1.0"}
+│ الصلاحية: ${c.adminOnly ? "للمسؤولين فقط" : "للجميع"}
+│ الانتظار: ${c.countDown || 1} ثانية
+│ القسم: ${c.category || "غير مصنف"}
+│ المطور: ${c.author || "Hridoy"}
+├── الاستخدام
+│ ${usage}
+├── ملاحظات
+│ استخدم ${prefix}help لعرض القائمة كاملة
+│ <نص> = إلزامي ، [نص] = اختياري
+╰────────────♡`.trim();
 
-📝 | الاسم:
-${cmd.name}
-
-🏷️ | الصنف:
-${cmd.category || cmd.commandCategory || "عام"}
-
-📖 | الوصف:
-${cmd.description || "لا يوجد"}
-
-🛠️ | الاستخدام:
-${
-  cmd.guide
-    ? cmd.guide.replace(
-        /{pn}/g,
-        prefix + cmd.name
-      )
-    : prefix + cmd.name
-}
-
-⏳ | الانتظار:
-${cmd.countDown || cmd.cooldowns || 0} ثانية
-
-━━━━━━━━━━━━━━
-✨ | نسخة NOVA برمجة وائل
-`;
-
-      api.setMessageReaction(
-        "✅",
-        messageID,
-        () => {},
-        true
-      );
-
-      return api.sendMessage(
-        msg,
-        threadID,
-        messageID
-      );
+      api.sendMessage(res, threadID, messageID);
+      console.log(chalk.cyan(`[Help] Details for "${commandName}" requested | ThreadID: ${threadID}`));
     }
-
-    // ═══════════════════
-    // تصنيف الأوامر
-    // ═══════════════════
-
-    const categories = {};
-
-    for (const cmd of commands.values()) {
-
-      if (
-        !cmd.config ||
-        !cmd.config.name
-      ) continue;
-
-      const category =
-        (
-          cmd.config.category ||
-          cmd.config.commandCategory ||
-          "عام"
-        ).toUpperCase();
-
-      if (!categories[category]) {
-
-        categories[category] = [];
-      }
-
-      categories[category].push(
-        cmd.config.name
-      );
-    }
-
-    // ═══════════════════
-    // إنشاء الرسالة
-    // ═══════════════════
-
-    let msg = `
-◈ ──『 📜 قـائمة أوامـر NOVA 』── ◈
-
-`;
-
-    for (const category in categories) {
-
-      msg += `🔹 [ ${category} ]\n`;
-
-      msg += `» ${categories[
-        category
-      ].join(" ، ")}\n\n`;
-    }
-
-    msg += `
-━━━━━━━━━━━━━━
-💡 | اكتب:
-${prefix}قائمة + اسم الأمر
-
-🚀 | مبرمج النسخة:
-وائل
-`;
-
-    api.setMessageReaction(
-      "✅",
-      messageID,
-      () => {},
-      true
-    );
-
-    return api.sendMessage(
-      msg,
-      threadID,
-      messageID
-    );
-
-  } catch (error) {
-
-    console.log(
-      chalk.red(
-        `[HELP ERROR] ${error.message}`
-      )
-    );
-
-    api.setMessageReaction(
-      "❌",
-      messageID,
-      () => {},
-      true
-    );
-
-    return api.sendMessage(
-      `❌ | حدث خطأ\n${error.message}`,
-      threadID,
-      messageID
-    );
+  } catch (err) {
+    console.log(chalk.red(`[Help Error] ${err.message}`));
+    api.sendMessage("❌ حدث خطأ داخلي أثناء محاولة عرض المساعدة.", threadID, messageID);
   }
 };
