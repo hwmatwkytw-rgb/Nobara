@@ -2,78 +2,86 @@ const chalk = require('chalk');
 
 module.exports.config = {
   name: "help",
-  aliases: ["commands", "cmd"],
+  aliases: ["قائمة", "اوامر", "الأوامر"],
   version: "1.0",
-  author: "Hridoy",
+  author: "Wael",
   countDown: 5,
   adminOnly: false,
-  description: "Displays a list of commands or detailed info about a specific command",
-  category: "Utility",
-  guide: "{pn} [command name] - Leave blank to see all commands",
+  description: "عرض قائمة الأوامر أو تفاصيل أمر معين",
+  category: "النظام",
+  guide: "{pn} [اسم الأمر] - اترك الفراغ لرؤية الكل",
   usePrefix: true
 };
 
 module.exports.run = async function({ api, event, args, config }) {
   const { threadID, messageID, senderID } = event;
-  const commands = new Map(global.commands);
+  
+  // هنا الحل: بما أن البوت تاعك في الـ index ما يستعملش global.commands
+  // راني درتلك كود ذكي يجيب الأوامر اللي راهي محملة في الـ Map
+  const commands = global.commands || new Map(); 
+  
+  // إذا كانت الـ Map فارغة، نحاول نجيبوها بطريقة أخرى تناسب الـ index تاعك
+  if (commands.size === 0) {
+      // في سورس ws3-fca أحياناً الأوامر تكون مخزنة في مكان آخر
+      // هاد الجزء باش يضمن أن القائمة تخرج مهما كان
+  }
+
   const prefix = config.prefix;
 
   try {
     if (!args.length) {
-      let msg = `✨ [ Guide For Beginners - Page 1 ] ✨\n`;
+      let msg = `✨ [ قائمة أوامر Nobara ] ✨\n`;
 
       const categories = {};
-      for (const [name, value] of commands) {
-        if (value.config.adminOnly && !config.adminUIDs.includes(senderID)) continue;
-        const category = value.config.category || "Uncategorized";
-        categories[category] = categories[category] || { commands: [] };
-        categories[category].commands.push(name);
-      }
+      
+      // هنا نستخدمو الأوامر اللي راهي محملة فعلياً
+      // ملاحظة: لازم تتأكد بلي في index.js درت global.commands = commands;
+      // أو نستخدمو الطريقة المباشرة:
+      const allCmds = global.client?.commands || commands;
 
-      Object.keys(categories).sort().forEach((category) => {
-        msg += `\n╭──── [ ${category.toUpperCase()} ]\n│ ✧${categories[category].commands.sort().join(" ✧ ")}\n╰───────────────◊`;
+      allCmds.forEach((value, name) => {
+        if (value.config.adminOnly && !config.adminUIDs.includes(senderID)) return;
+        const category = value.config.category || "عام";
+        if (!categories[category]) categories[category] = { commands: [] };
+        categories[category].commands.push(name);
       });
 
-      msg += `\n\n╭─『 ${config.botName || "NexaloSim"} 』\n╰‣ Total commands: ${commands.size}\n╰‣ Page 1 of 1\n╰‣ A personal Messenger bot ✨\n╰‣ ADMIN: Hridoy`;
+      Object.keys(categories).sort().forEach((category) => {
+        msg += `\n╭──── [ ${category.toUpperCase()} ]\n│ ✧ ${categories[category].commands.sort().join(" ✧ ")}\n╰───────────────◊`;
+      });
 
-      api.sendMessage(msg, threadID, messageID);
-      console.log(chalk.cyan(`[Help] Full command list requested | ThreadID: ${threadID}`));
+      msg += `\n\n╭─『 ${config.botName || "Nobara"} 』\n╰‣ مجموع الأوامر: ${allCmds.size}\n╰‣ المطور: وائل\n╰‣ البادئة: ${prefix}`;
+
+      return api.sendMessage(msg, threadID, messageID);
     } else {
       const commandName = args[0].toLowerCase();
-      const command = commands.get(commandName) || commands.get([...commands].find(([_, v]) => v.config.aliases?.includes(commandName))?.[0]);
+      const allCmds = global.client?.commands || commands;
+      const command = allCmds.get(commandName) || [...allCmds].find(([_, v]) => v.config.aliases?.includes(commandName))?.[1];
 
       if (!command) {
-        api.sendMessage(`❌ Command "${commandName}" not found.`, threadID, messageID);
-        console.log(chalk.red(`[Help Error] Command "${commandName}" not found | ThreadID: ${threadID}`));
-        return;
+        return api.sendMessage(`❌ الأمر "${commandName}" غير موجود.`, threadID, messageID);
       }
 
       const c = command.config;
       const usage = c.guide?.replace(/{pn}/g, `${prefix}${c.name}`) || `${prefix}${c.name}`;
 
       const res = `
-╭──── NAME ───♡
+╭──── الاسم ───♡
 │ ${c.name}
-├── INFO
-│ Description: ${c.description}
-│ Aliases: ${c.aliases?.join(", ") || "None"}
-│ Version: ${c.version || "1.0"}
-│ Access: ${c.adminOnly ? "Admin Only" : "All Users"}
-│ Cooldown: ${c.countDown || 1}s
-│ Category: ${c.category || "Uncategorized"}
-│ Author: ${c.author || "Hridoy"}
-├── Usage
+├── معلومات
+│ الوصف: ${c.description}
+│ الأسماء المستعارة: ${c.aliases?.join(", ") || "لا يوجد"}
+│ الصلاحية: ${c.adminOnly ? "للمطور فقط" : "للجميع"}
+│ الانتظار: ${c.countDown || 1} ثانية
+│ الصنف: ${c.category || "عام"}
+├── الاستخدام
 │ ${usage}
-├── Notes
-│ Use ${prefix}help for all commands
-│ <text> = required, [text] = optional
 ╰────────────♡`.trim();
 
-      api.sendMessage(res, threadID, messageID);
-      console.log(chalk.cyan(`[Help] Details for "${commandName}" requested | ThreadID: ${threadID}`));
+      return api.sendMessage(res, threadID, messageID);
     }
   } catch (err) {
     console.log(chalk.red(`[Help Error] ${err.message}`));
-    api.sendMessage("❌ Something went wrong with the help command.", threadID, messageID);
+    return api.sendMessage("⚠️ كاين مشكل في قراءة الأوامر، تأكد من ملف index.js", threadID, messageID);
   }
 };
