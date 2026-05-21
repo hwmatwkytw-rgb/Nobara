@@ -1,87 +1,91 @@
-const chalk = require('chalk');
+module.exports = {
+  config: {
+    name: "help",
+    aliases: ["الاوامر", "أوامر", "اوامر", "المساعدة"],
+    version: "1.5.0",
+    author: "Nobara Developer",
+    countDown: 5,
+    role: 0, // 0 = للجميع، 1 = للمطورين فقط
+    usePrefix: true, // يحتاج بادئة ليعمل
+    description: "يعرض قائمة الأوامر المتاحة في البوت أو تفاصيل أمر معين.",
+    category: "system",
+    guide: "{p}help [اسم الأمر]"
+  },
 
-module.exports.config = {
-  name: "help",
-  aliases: ["قائمة", "اوامر", "الأوامر"],
-  version: "1.0",
-  author: "Wael",
-  countDown: 5,
-  adminOnly: false,
-  description: "عرض قائمة الأوامر أو تفاصيل أمر معين",
-  category: "النظام",
-  guide: "{pn} [اسم الأمر] - اترك الفراغ لرؤية الكل",
-  usePrefix: true
-};
+  run: async ({ api, event, args, config }) => {
+    const { threadID, messageID } = event;
+    const prefix = config.prefix;
 
-module.exports.run = async function({ api, event, args, config }) {
-  const { threadID, messageID, senderID } = event;
-  
-  // هنا الحل: بما أن البوت تاعك في الـ index ما يستعملش global.commands
-  // راني درتلك كود ذكي يجيب الأوامر اللي راهي محملة في الـ Map
-  const commands = global.commands || new Map(); 
-  
-  // إذا كانت الـ Map فارغة، نحاول نجيبوها بطريقة أخرى تناسب الـ index تاعك
-  if (commands.size === 0) {
-      // في سورس ws3-fca أحياناً الأوامر تكون مخزنة في مكان آخر
-      // هاد الجزء باش يضمن أن القائمة تخرج مهما كان
-  }
+    // استدعاء جميع الأوامر من ملف البوت الأساسي عبر الـ require (أو تمريرها من الماب)
+    // لكن بما أن الكود الأساسي لا يمرر الماب كاملة في الـ run، سنقوم بالوصول للأوامر من خلال الماب (إذا قمت بتعديل السورس لاحقاً) 
+    // أو الأسهل: قراءة الكوماندز المتاحة حالياً من السيرفر. 
+    // للحل الأضمن والمتوافق مع كودك الحالي، سنحتاج للوصول للماب المفتوحة في ملفك الرئيسي، 
+    // وبما أن الكود يمرر فقط (api, event, args, config)، أفضل طريقة لتجنب التعديل في السورس هي كالتالي:
 
-  const prefix = config.prefix;
+    // ملاحظة: للوصول للأوامر، سنعتمد على الماب التي تم تخزينها في السيرفر.
+    // إذا واجهت مشكلة في قراءة `global.client.commands` سأعطيك الطريقة القياسية:
+    
+    // سنقوم بقراءة الأوامر المخزنة في الكود الرئيسي. بما أن الكود الرئيسي لم يضع `commands` في الـ global،
+    // يفضل إضافة `global.commands = commands;` في ملفك الرئيسي بعد تعريف الماب مباشرة.
+    
+    const allCommands = global.commands || new Map(); 
 
-  try {
-    if (!args.length) {
-      let msg = `✨ [ قائمة أوامر Nobara ] ✨\n`;
+    if (allCommands.size === 0) {
+      return api.sendMessage("⚠️ لم يتم العثور على أوامر محملة في الذاكرة، تأكد من إضافة global.commands = commands في ملفك الرئيسي.", threadID, messageID);
+    }
 
-      const categories = {};
-      
-      // هنا نستخدمو الأوامر اللي راهي محملة فعلياً
-      // ملاحظة: لازم تتأكد بلي في index.js درت global.commands = commands;
-      // أو نستخدمو الطريقة المباشرة:
-      const allCmds = global.client?.commands || commands;
-
-      allCmds.forEach((value, name) => {
-        if (value.config.adminOnly && !config.adminUIDs.includes(senderID)) return;
-        const category = value.config.category || "عام";
-        if (!categories[category]) categories[category] = { commands: [] };
-        categories[category].commands.push(name);
-      });
-
-      Object.keys(categories).sort().forEach((category) => {
-        msg += `\n╭──── [ ${category.toUpperCase()} ]\n│ ✧ ${categories[category].commands.sort().join(" ✧ ")}\n╰───────────────◊`;
-      });
-
-      msg += `\n\n╭─『 ${config.botName || "Nobara"} 』\n╰‣ مجموع الأوامر: ${allCmds.size}\n╰‣ المطور: وائل\n╰‣ البادئة: ${prefix}`;
-
-      return api.sendMessage(msg, threadID, messageID);
-    } else {
+    // الحالة الأولى: طلب تفاصيل أمر معين (مثال: !help غني)
+    if (args[0]) {
       const commandName = args[0].toLowerCase();
-      const allCmds = global.client?.commands || commands;
-      const command = allCmds.get(commandName) || [...allCmds].find(([_, v]) => v.config.aliases?.includes(commandName))?.[1];
+      const command = allCommands.get(commandName) || [...allCommands.values()].find(c => c.config.aliases?.includes(commandName));
 
       if (!command) {
-        return api.sendMessage(`❌ الأمر "${commandName}" غير موجود.`, threadID, messageID);
+        return api.sendMessage(`❌ عذراً، الأمر "${commandName}" غير موجود في قائمة الأوامر.`, threadID, messageID);
       }
 
-      const c = command.config;
-      const usage = c.guide?.replace(/{pn}/g, `${prefix}${c.name}`) || `${prefix}${c.name}`;
+      const { name, version, description, usePrefix, guide, aliases, adminOnly } = command.config;
+      
+      let msg = `═✨ تفاصيل الأمر [ ${name.toUpperCase()} ] ✨═\n\n`;
+      msg += `📝 الوصف: ${description || 'لا يوجد وصف حالياً.'}\n`;
+      msg += `🔄 الإصدار: ${version || '1.0.0'}\n`;
+      msg += `⚙️ استخدام البادئة: ${usePrefix ? `نعم (${prefix})` : 'لا (يعمل تلقائياً)'}\n`;
+      msg += `👑 خاص بالمطورين: ${adminOnly ? 'نعم' : 'لا'}\n`;
+      if (aliases && aliases.length > 0) msg += `🔗 أسماء مستعارة: ${aliases.join(', ')}\n`;
+      msg += `📖 طريقة الاستخدام: ${guide ? guide.replace('{p}', prefix) : `${prefix}${name}`}\n`;
+      msg += `\n════════════════════`;
 
-      const res = `
-╭──── الاسم ───♡
-│ ${c.name}
-├── معلومات
-│ الوصف: ${c.description}
-│ الأسماء المستعارة: ${c.aliases?.join(", ") || "لا يوجد"}
-│ الصلاحية: ${c.adminOnly ? "للمطور فقط" : "للجميع"}
-│ الانتظار: ${c.countDown || 1} ثانية
-│ الصنف: ${c.category || "عام"}
-├── الاستخدام
-│ ${usage}
-╰────────────♡`.trim();
-
-      return api.sendMessage(res, threadID, messageID);
+      return api.sendMessage(msg, threadID, messageID);
     }
-  } catch (err) {
-    console.log(chalk.red(`[Help Error] ${err.message}`));
-    return api.sendMessage("⚠️ كاين مشكل في قراءة الأوامر، تأكد من ملف index.js", threadID, messageID);
+
+    // الحالة الثانية: عرض كل الأوامر المتاحة
+    let withPrefix = [];
+    let withoutPrefix = [];
+
+    allCommands.forEach((cmd) => {
+      if (cmd.config.usePrefix === false) {
+        withoutPrefix.push(`• ${cmd.config.name}`);
+      } else {
+        withPrefix.push(`• ${cmd.config.name}`);
+      }
+    });
+
+    let helpMessage = `═════════ ✨ ＮＯＢＡＲＡ ✨ ═════════\n\n`;
+    helpMessage += `⚡ البادئة الحالية للبوت هي: [ ${prefix} ]\n`;
+    helpMessage += `📊 إجمالي الأوامر المتاحة: ${allCommands.size}\n\n`;
+
+    if (withPrefix.length > 0) {
+      helpMessage += `🔮 أوامر تحتاج بادئة [ ${prefix} ] :\n`;
+      helpMessage += `${withPrefix.join('\n')}\n\n`;
+    }
+
+    if (withoutPrefix.length > 0) {
+      helpMessage += `💬 أوامر بدون بادئة (تلقائية) :\n`;
+      helpMessage += `${withoutPrefix.join('\n')}\n\n`;
+    }
+
+    helpMessage += `💡 للمزيد من التفاصيل حول أمر معين اكتب:\n👈 ${prefix}help [اسم الأمر]\n`;
+    helpMessage += `══════════════════════════`;
+
+    api.sendMessage(helpMessage, threadID, messageID);
   }
 };
