@@ -18,6 +18,8 @@ app.listen(PORT, () => console.log(chalk.cyan(`[Server] Web Server is running on
 
 const commands = new Map();
 const events = new Map();
+global.commands = commands;
+global.events = events;
 const commandsDir = path.join(__dirname, 'scripts', 'commands');
 const eventsDir = path.join(__dirname, 'scripts', 'events');
 
